@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
@@ -5,6 +6,8 @@ from fpdf import FPDF
 import plotly.graph_objects as go
 import json
 import re
+import qrcode
+import tempfile
 
 # -------------------------------------------------------------
 # 1. การตั้งค่าหน้าเว็บ & CUSTOM CSS 
@@ -27,13 +30,13 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # -------------------------------------------------------------
-# 2. ส่วน HEADER (LOGO & TITLE)
+# 2. ส่วน HEADER (LOGO & TITLE) ของแอปบนจอ iPad
 # -------------------------------------------------------------
 col_logo, col_title = st.columns([1, 5])
 with col_logo:
-    try:
+    if os.path.exists("logo.png"):
         st.image("logo.png", width=120)
-    except:
+    else:
         st.markdown("*(Logo)*")
 with col_title:
     st.markdown("<h1 style='color: #1E1E1E; margin-bottom: 0px;'>DERMED CLINIC</h1>", unsafe_allow_html=True)
@@ -61,32 +64,72 @@ st.info("🔒 **Data Privacy (PDPA Compliant):** All images are processed secure
 pdpa_consent = st.checkbox("I verify that explicit patient consent has been obtained for AI-assisted clinical analysis.")
 
 # -------------------------------------------------------------
-# 3. ฟังก์ชันสร้าง PDF (แก้ไขปัญหาอักขระพิเศษ)
+# 3. ฟังก์ชันสร้าง PDF (เพิ่ม Logo, Contact, QR Code)
 # -------------------------------------------------------------
 def create_pdf(report_text, eth, age):
     pdf = FPDF()
     pdf.add_page()
+    
+    # --- PDF HEADER ---
+    # ใส่ Logo ใน PDF (ถ้ามีไฟล์อัปโหลดไว้ใน GitHub)
+    if os.path.exists("logo.png"):
+        pdf.image("logo.png", x=10, y=8, w=25)
+        
+    pdf.set_y(12)
     pdf.set_font("Helvetica", style="B", size=16)
     pdf.cell(0, 10, "DERMED CLINIC", ln=True, align="C")
     pdf.set_font("Helvetica", style="B", size=12)
     pdf.cell(0, 10, "Personalized Facial Architecture Report", ln=True, align="C")
-    pdf.line(10, 30, 200, 30)
-    pdf.ln(10)
+    pdf.line(10, 32, 200, 32)
+    
+    # --- PATIENT INFO ---
+    pdf.set_y(35)
     pdf.set_font("Helvetica", style="I", size=10)
     pdf.cell(0, 10, f"Patient Profile: {age} years old | {eth} descent", ln=True)
-    pdf.ln(5)
+    pdf.ln(3)
     
+    # --- BODY TEXT ---
     clean_text = report_text.replace('**', '')
     replacements = {'“': '"', '”': '"', "‘": "'", "’": "'", '–': '-', '—': '-', '…': '...', '•': '-', '·': '-', '°': ' degrees'}
     for old_char, new_char in replacements.items():
         clean_text = clean_text.replace(old_char, new_char)
     clean_text = clean_text.encode('latin-1', 'ignore').decode('latin-1')
     
-    pdf.set_font("Helvetica", size=10)
-    pdf.multi_cell(0, 6, clean_text)
-    pdf.ln(15)
+    pdf.set_font("Helvetica", size=9)
+    pdf.multi_cell(0, 5.5, clean_text)
+    pdf.ln(5)
+    
+    # --- FOOTER & CONTACT SECTION ---
+    # วาดเส้นคั่น
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(5)
+    
+    # จำตำแหน่งแกน Y เพื่อให้ข้อความกับ QR Code อยู่บรรทัดเดียวกัน (ซ้าย-ขวา)
+    current_y = pdf.get_y()
+    
+    # ส่วนข้อความด้านซ้าย
+    pdf.set_font("Helvetica", style="B", size=10)
+    pdf.cell(150, 6, "Location & Contact Details", ln=True)
+    pdf.set_font("Helvetica", size=9)
+    pdf.cell(150, 5, "Address: 6th Floor, MBK Center (Room B003005)", ln=True)
+    pdf.cell(150, 5, "444 Phayathai Road, Wang Mai, Pathum Wan, Bangkok 10330", ln=True)
+    pdf.cell(150, 5, "Opening Hours: Daily from 11:00 AM - 8:00 PM", ln=True)
+    
+    # สร้างรูป QR Code และวางด้านขวา
+    qr = qrcode.QRCode(box_size=10, border=1)
+    qr.add_data("https://linktr.ee/dermed.clinic")
+    qr.make(fit=True)
+    qr_img = qr.make_image(fill_color="black", back_color="white")
+    
+    # เซฟ QR Code ชั่วคราวเพื่อแปะลง PDF
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+        qr_img.save(tmp.name)
+        pdf.image(tmp.name, x=165, y=current_y, w=28)
+    
+    pdf.ln(10)
     pdf.set_font("Helvetica", style="I", size=8)
     pdf.cell(0, 10, "Disclaimer: This analysis is an AI-assisted tool and should be verified by a Dermed Clinic physician.", ln=True)
+    
     return bytes(pdf.output())
 
 # -------------------------------------------------------------
@@ -95,28 +138,22 @@ def create_pdf(report_text, eth, age):
 def draw_radar_chart(scores_dict):
     categories = list(scores_dict.keys())
     values = list(scores_dict.values())
-    categories.append(categories[0]) # ปิดลูปกราฟ
+    categories.append(categories[0]) 
     values.append(values[0])
 
     fig = go.Figure()
     fig.add_trace(go.Scatterpolar(
-        r=values,
-        theta=categories,
-        fill='toself',
-        fillcolor='rgba(197, 168, 128, 0.4)', # สีทองโปร่งแสง
-        line_color='#C5A880',
-        name='Facial Harmony Score'
+        r=values, theta=categories, fill='toself',
+        fillcolor='rgba(197, 168, 128, 0.4)', line_color='#C5A880', name='Facial Harmony Score'
     ))
     fig.update_layout(
         polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
-        showlegend=False,
-        margin=dict(l=40, r=40, t=30, b=30),
-        height=400
+        showlegend=False, margin=dict(l=40, r=40, t=30, b=30), height=400
     )
     return fig
 
 # -------------------------------------------------------------
-# 5. PROMPT (บังคับโครงสร้างข้อมูลและยาเฉพาะในไทย)
+# 5. PROMPT
 # -------------------------------------------------------------
 system_prompt = f"""
 You are a world-class aesthetic physician at DERMED CLINIC in Thailand. 
@@ -158,19 +195,17 @@ if st.button("EXECUTE CLINICAL ANALYSIS"):
             
             raw_text = response.text
             
-            # แยกส่วนกราฟและรายงานออกจากกัน
             try:
                 json_str = re.search(r'===JSON_SCORES===(.*?)===END_JSON===', raw_text, re.DOTALL).group(1)
                 scores_data = json.loads(json_str)
                 report_text = raw_text.split('===REPORT===')[1].strip()
             except:
                 scores_data = None
-                report_text = raw_text # กรณี AI ตอบผิดฟอร์แมต ให้แสดงข้อความปกติ
+                report_text = raw_text 
             
             st.success("✅ Analysis Complete")
             st.markdown("---")
             
-            # จัด Layout ซ้ายคือกราฟ ขวาคือข้อความรายงาน
             if scores_data:
                 col_chart, col_text = st.columns([1, 1.5])
                 with col_chart:
@@ -182,7 +217,6 @@ if st.button("EXECUTE CLINICAL ANALYSIS"):
             else:
                 st.markdown(report_text)
             
-            # ปุ่มโหลด PDF
             pdf_bytes = create_pdf(report_text, ethnicity, age_group)
             st.markdown("---")
             st.download_button(
