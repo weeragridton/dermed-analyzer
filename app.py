@@ -95,26 +95,48 @@ st.info("🔒 **Data Privacy (PDPA Compliant):** All images are processed secure
 pdpa_consent = st.checkbox("I verify that explicit patient consent has been obtained for AI-assisted clinical analysis.")
 
 # -------------------------------------------------------------
-# 6. ฟังก์ชันสร้าง PDF (คงเดิม แต่ปรับ Font)
+# 6. ฟังก์ชันสร้าง PDF (อัปเดตแก้ปัญหา Unicode & อักขระพิเศษ)
 # -------------------------------------------------------------
 def create_pdf(report_text, eth, age):
     pdf = FPDF()
     pdf.add_page()
+    
+    # Header
     pdf.set_font("Helvetica", style="B", size=16)
     pdf.cell(0, 10, "DERMED CLINIC", ln=True, align="C")
     pdf.set_font("Helvetica", style="B", size=12)
     pdf.cell(0, 10, "Personalized Facial Architecture Report", ln=True, align="C")
     pdf.line(10, 30, 200, 30)
     pdf.ln(10)
+    
+    # Patient Info
     pdf.set_font("Helvetica", style="I", size=10)
     pdf.cell(0, 10, f"Patient Profile: {age} years old | {eth} descent", ln=True)
     pdf.ln(5)
+    
+    # ทำความสะอาด Text (ลบตัวหนาและแปลงอักขระพิเศษที่ AI ชอบใช้)
     clean_text = report_text.replace('**', '')
+    
+    replacements = {
+        '“': '"', '”': '"', "‘": "'", "’": "'",
+        '–': '-', '—': '-', '…': '...',
+        '•': '-', '·': '-', '°': ' degrees'
+    }
+    for old_char, new_char in replacements.items():
+        clean_text = clean_text.replace(old_char, new_char)
+        
+    # บังคับแปลงเป็น latin-1 เพื่อป้องกัน Error (คำอย่าง Juvéderm ที่มี é จะยังแสดงผลได้ปกติ)
+    clean_text = clean_text.encode('latin-1', 'ignore').decode('latin-1')
+    
+    # Body Text
     pdf.set_font("Helvetica", size=10)
     pdf.multi_cell(0, 6, clean_text)
+    
+    # Footer
     pdf.ln(15)
     pdf.set_font("Helvetica", style="I", size=8)
     pdf.cell(0, 10, "Disclaimer: This analysis is an AI-assisted tool and should be verified by a Dermed Clinic physician.", ln=True)
+    
     return bytes(pdf.output())
 
 # -------------------------------------------------------------
