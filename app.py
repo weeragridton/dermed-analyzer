@@ -2,50 +2,27 @@ import streamlit as st
 import google.generativeai as genai
 from PIL import Image
 from fpdf import FPDF
-import io
+import plotly.graph_objects as go
+import json
+import re
 
 # -------------------------------------------------------------
-# 1. การตั้งค่าหน้าเว็บ & CUSTOM CSS (LUXURY THEME)
+# 1. การตั้งค่าหน้าเว็บ & CUSTOM CSS 
 # -------------------------------------------------------------
 st.set_page_config(page_title="DERMED CLINIC | AI Facial Analysis", page_icon="✨", layout="wide")
 
 st.markdown("""
     <style>
-    /* นำเข้าฟอนต์สากลที่ดูพรีเมียม */
     @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&display=swap');
-    
-    html, body, [class*="css"]  {
-        font-family: 'Montserrat', sans-serif;
-    }
-    
-    /* ปรับแต่งปุ่มกดให้ดูหรูหรา (โทนดำ-ทอง) */
+    html, body, [class*="css"]  { font-family: 'Montserrat', sans-serif; }
     .stButton>button {
-        background-color: #1E1E1E; 
-        color: #FFFFFF;
-        border-radius: 4px;
-        border: 1px solid #1E1E1E;
-        padding: 10px 24px;
-        font-weight: 500;
-        letter-spacing: 1px;
-        transition: all 0.3s ease 0s;
-        width: 100%;
+        background-color: #1E1E1E; color: #FFFFFF; border-radius: 4px;
+        border: 1px solid #1E1E1E; padding: 10px 24px; font-weight: 500;
+        letter-spacing: 1px; transition: all 0.3s ease 0s; width: 100%;
     }
-    .stButton>button:hover {
-        background-color: #C5A880; /* สีทอง/แชมเปญ */
-        color: white;
-        border: 1px solid #C5A880;
-    }
-    
-    /* สีของ Checkbox PDPA */
+    .stButton>button:hover { background-color: #C5A880; color: white; border: 1px solid #C5A880; }
     .st-cx { background-color: #C5A880; }
-    
-    /* เส้นคั่น */
-    hr {
-        margin-top: 1rem;
-        margin-bottom: 2rem;
-        border: 0;
-        border-top: 1px solid rgba(0,0,0,.1);
-    }
+    hr { margin-top: 1rem; margin-bottom: 2rem; border: 0; border-top: 1px solid rgba(0,0,0,.1); }
     </style>
 """, unsafe_allow_html=True)
 
@@ -55,27 +32,19 @@ st.markdown("""
 col_logo, col_title = st.columns([1, 5])
 with col_logo:
     try:
-        # ระบบจะดึงรูป logo.png ที่คุณอัปโหลดไว้มาแสดง
         st.image("logo.png", width=120)
     except:
-        st.markdown("*(Logo)*") # เผื่อกรณีหารูปไม่เจอ
-
+        st.markdown("*(Logo)*")
 with col_title:
     st.markdown("<h1 style='color: #1E1E1E; margin-bottom: 0px;'>DERMED CLINIC</h1>", unsafe_allow_html=True)
     st.markdown("<p style='font-size: 18px; color: #666; letter-spacing: 1px;'>ADVANCED FACIAL ARCHITECTURE & AESTHETIC ANALYSIS</p>", unsafe_allow_html=True)
 
 st.markdown("---")
 
-# -------------------------------------------------------------
-# 3. ใส่ API Key อย่างปลอดภัย
-# -------------------------------------------------------------
 API_KEY = st.secrets["GEMINI_API_KEY"]
 genai.configure(api_key=API_KEY)
-model = genai.GenerativeModel('gemini-3.8-flash')
+model = genai.GenerativeModel('gemini-1.5-pro')
 
-# -------------------------------------------------------------
-# 4. ส่วนรับข้อมูลผู้ป่วย (PATIENT PROFILE)
-# -------------------------------------------------------------
 st.markdown("<h3 style='color: #1E1E1E;'>1. Patient Profile Formulation</h3>", unsafe_allow_html=True)
 col_eth, col_age = st.columns(2)
 with col_eth:
@@ -83,72 +52,94 @@ with col_eth:
 with col_age:
     age_group = st.selectbox("Age Range (Physiological):", ["20-29", "30-39", "40-49", "50-59", "60+"])
 
-st.write("") # เว้นบรรทัด
+st.write("") 
 st.markdown("<h3 style='color: #1E1E1E;'>2. Image Acquisition</h3>", unsafe_allow_html=True)
 uploaded_files = st.file_uploader("Upload Medical Photos (Frontal, 45° Oblique, 90° Profile)", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
 
-# -------------------------------------------------------------
-# 5. PDPA & CONSENT
-# -------------------------------------------------------------
 st.write("")
 st.info("🔒 **Data Privacy (PDPA Compliant):** All images are processed securely in-memory and are never stored on our servers.")
 pdpa_consent = st.checkbox("I verify that explicit patient consent has been obtained for AI-assisted clinical analysis.")
 
 # -------------------------------------------------------------
-# 6. ฟังก์ชันสร้าง PDF (อัปเดตแก้ปัญหา Unicode & อักขระพิเศษ)
+# 3. ฟังก์ชันสร้าง PDF (แก้ไขปัญหาอักขระพิเศษ)
 # -------------------------------------------------------------
 def create_pdf(report_text, eth, age):
     pdf = FPDF()
     pdf.add_page()
-    
-    # Header
     pdf.set_font("Helvetica", style="B", size=16)
     pdf.cell(0, 10, "DERMED CLINIC", ln=True, align="C")
     pdf.set_font("Helvetica", style="B", size=12)
     pdf.cell(0, 10, "Personalized Facial Architecture Report", ln=True, align="C")
     pdf.line(10, 30, 200, 30)
     pdf.ln(10)
-    
-    # Patient Info
     pdf.set_font("Helvetica", style="I", size=10)
     pdf.cell(0, 10, f"Patient Profile: {age} years old | {eth} descent", ln=True)
     pdf.ln(5)
     
-    # ทำความสะอาด Text (ลบตัวหนาและแปลงอักขระพิเศษที่ AI ชอบใช้)
     clean_text = report_text.replace('**', '')
-    
-    replacements = {
-        '“': '"', '”': '"', "‘": "'", "’": "'",
-        '–': '-', '—': '-', '…': '...',
-        '•': '-', '·': '-', '°': ' degrees'
-    }
+    replacements = {'“': '"', '”': '"', "‘": "'", "’": "'", '–': '-', '—': '-', '…': '...', '•': '-', '·': '-', '°': ' degrees'}
     for old_char, new_char in replacements.items():
         clean_text = clean_text.replace(old_char, new_char)
-        
-    # บังคับแปลงเป็น latin-1 เพื่อป้องกัน Error (คำอย่าง Juvéderm ที่มี é จะยังแสดงผลได้ปกติ)
     clean_text = clean_text.encode('latin-1', 'ignore').decode('latin-1')
     
-    # Body Text
     pdf.set_font("Helvetica", size=10)
     pdf.multi_cell(0, 6, clean_text)
-    
-    # Footer
     pdf.ln(15)
     pdf.set_font("Helvetica", style="I", size=8)
     pdf.cell(0, 10, "Disclaimer: This analysis is an AI-assisted tool and should be verified by a Dermed Clinic physician.", ln=True)
-    
     return bytes(pdf.output())
 
 # -------------------------------------------------------------
-# 7. PROMPT & GENERATION
+# 4. ฟังก์ชันวาดกราฟ Radar
+# -------------------------------------------------------------
+def draw_radar_chart(scores_dict):
+    categories = list(scores_dict.keys())
+    values = list(scores_dict.values())
+    categories.append(categories[0]) # ปิดลูปกราฟ
+    values.append(values[0])
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatterpolar(
+        r=values,
+        theta=categories,
+        fill='toself',
+        fillcolor='rgba(197, 168, 128, 0.4)', # สีทองโปร่งแสง
+        line_color='#C5A880',
+        name='Facial Harmony Score'
+    ))
+    fig.update_layout(
+        polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
+        showlegend=False,
+        margin=dict(l=40, r=40, t=30, b=30),
+        height=400
+    )
+    return fig
+
+# -------------------------------------------------------------
+# 5. PROMPT (บังคับโครงสร้างข้อมูลและยาเฉพาะในไทย)
 # -------------------------------------------------------------
 system_prompt = f"""
-You are a world-class aesthetic physician at DERMED CLINIC. 
-Analyze the provided facial images of a {age_group} year old {ethnicity} patient.
-Focus ONLY on non-surgical injectable treatments. Provide analysis in English.
+You are a world-class aesthetic physician at DERMED CLINIC in Thailand. 
+Analyze the facial images of a {age_group} year old {ethnicity} patient.
+Focus ONLY on non-surgical injectable treatments. 
+CRITICAL RULE: You MUST ONLY recommend products, brands, and injectables that are legally available and approved by the THAI FDA (e.g., Juvéderm, Restylane, Belotero, Teosyal, Sculptra, Radiesse, Gouri, Botox Allergan, Dysport, Xeomin, Nabota, Aestox). Do not mention products unavailable in Thailand.
+
+Output your response EXACTLY in this format with TWO parts:
+
+===JSON_SCORES===
+{{
+    "Midface Volume": 80,
+    "Jawline & Chin": 75,
+    "Eye Area": 70,
+    "Skin Quality": 85,
+    "Overall Symmetry": 80
+}}
+===END_JSON===
+
+===REPORT===
 1. Current Anatomical Score (0-100).
 2. Core Problem Identification (Root cause like bone/fat pad).
-3. Prioritized Action Plan (The DERMED Protocol): Priority 1, 2, 3.
+3. Prioritized Action Plan (The DERMED Protocol): Priority 1, 2, 3 (Mention specific Thai FDA approved brands).
 4. Projected Score.
 5. Medical Evidence Note.
 """
@@ -160,17 +151,39 @@ if st.button("EXECUTE CLINICAL ANALYSIS"):
     elif len(uploaded_files) == 0:
         st.warning("⚠️ Action Required: Please upload diagnostic images.")
     else:
-        with st.spinner('Initiating deep anatomical scan...'):
+        with st.spinner('Initiating deep anatomical scan and rendering charts...'):
             images = [Image.open(f) for f in uploaded_files]
             request_content = [system_prompt] + images
             response = model.generate_content(request_content)
             
+            raw_text = response.text
+            
+            # แยกส่วนกราฟและรายงานออกจากกัน
+            try:
+                json_str = re.search(r'===JSON_SCORES===(.*?)===END_JSON===', raw_text, re.DOTALL).group(1)
+                scores_data = json.loads(json_str)
+                report_text = raw_text.split('===REPORT===')[1].strip()
+            except:
+                scores_data = None
+                report_text = raw_text # กรณี AI ตอบผิดฟอร์แมต ให้แสดงข้อความปกติ
+            
             st.success("✅ Analysis Complete")
             st.markdown("---")
-            st.markdown(response.text)
             
-            pdf_bytes = create_pdf(response.text, ethnicity, age_group)
+            # จัด Layout ซ้ายคือกราฟ ขวาคือข้อความรายงาน
+            if scores_data:
+                col_chart, col_text = st.columns([1, 1.5])
+                with col_chart:
+                    st.markdown("<h4 style='text-align: center; color: #1E1E1E;'>Facial Harmony Radar</h4>", unsafe_allow_html=True)
+                    fig = draw_radar_chart(scores_data)
+                    st.plotly_chart(fig, use_container_width=True)
+                with col_text:
+                    st.markdown(report_text)
+            else:
+                st.markdown(report_text)
             
+            # ปุ่มโหลด PDF
+            pdf_bytes = create_pdf(report_text, ethnicity, age_group)
             st.markdown("---")
             st.download_button(
                 label="📥 EXPORT CLINICAL REPORT (PDF)",
