@@ -152,23 +152,8 @@ if st.button("EXECUTE CLINICAL ANALYSIS"):
         st.warning("⚠️ Action Required: Please upload diagnostic images.")
     else:
         with st.spinner('Initiating deep anatomical scan and rendering charts...'):
-            # --- เริ่มส่วนที่อัปเกรดเพื่อแก้ Error ---
-            images = []
-            for f in uploaded_files:
-                img = Image.open(f)
-                
-                # 1. บังคับแปลงภาพเป็น RGB (แก้ปัญหาไฟล์ PNG โปร่งใส)
-                if img.mode != 'RGB':
-                    img = img.convert('RGB')
-                
-                # 2. ย่อขนาดภาพให้ไม่เกิน 1024px (ลดขนาดไฟล์ไม่ให้เกินโควต้า API แต่ภาพยังชัดเจน)
-                img.thumbnail((1024, 1024))
-                
-                images.append(img)
-                
+            images = [Image.open(f) for f in uploaded_files]
             request_content = [system_prompt] + images
-            # --- จบส่วนที่อัปเกรด ---
-            
             response = model.generate_content(request_content)
             
             raw_text = response.text
