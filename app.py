@@ -43,7 +43,7 @@ st.markdown("---")
 
 API_KEY = st.secrets["GEMINI_API_KEY"]
 genai.configure(api_key=API_KEY)
-model = genai.GenerativeModel('gemini-1.5-pro')
+model = genai.GenerativeModel('gemini-3.8-flash')
 
 st.markdown("<h3 style='color: #1E1E1E;'>1. Patient Profile Formulation</h3>", unsafe_allow_html=True)
 col_eth, col_age = st.columns(2)
