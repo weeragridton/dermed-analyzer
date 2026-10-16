@@ -15,28 +15,6 @@ st.set_page_config(page_title="DERMED CLINIC | AI Facial Analysis", page_icon="�
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap');
-    html, body, [class*="cssเพื่อให้ง่ายและป้องกันปัญหาการเว้นบรรทัดหรือย่อหน้าผิด (ซึ่งจะทำให้โปรแกรม Error ได้) ให้คุณ **คัดลอกโค้ดด้านล่างนี้ไปวางทับของเดิมทั้งหมดในไฟล์ `app.py` บน GitHub ได้เลยครับ** 
-
-ผมได้ประกอบร่างระบบ "ย่อรูปอัตโนมัติ" และ "แสดงรายละเอียด Error ของ API" เข้าไปในโค้ดชุดนี้ให้เรียบร้อยแล้วครับ:
-
-```python
-import streamlit as st
-import google.generativeai as genai
-from PIL import Image
-from fpdf import FPDF
-import plotly.graph_objects as go
-import json
-import re
-import os
-
-# -------------------------------------------------------------
-# 1. การตั้งค่าหน้าเว็บ & CUSTOM CSS
-# -------------------------------------------------------------
-st.set_page_config(page_title="DERMED CLINIC | AI Facial Analysis", page_icon="✨", layout="wide")
-
-st.markdown("""
-    <style>
-    @import url('[https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap](https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap)');
     html, body, [class*="css"]  { font-family: 'Montserrat', sans-serif; }
     .stButton>button {
         background-color: #1E1E1E; color: #FFFFFF; border-radius: 4px;
