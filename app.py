@@ -116,7 +116,7 @@ def draw_radar_chart(scores_dict):
     return fig
 
 # -------------------------------------------------------------
-# 5. PROMPT (บังคับโครงสร้างข้อมูลและยาเฉพาะในไทย)
+# 5. PROMPT & GENERATION (อัปเดตแก้ปัญหา InvalidArgument และขนาดรูปภาพ)
 # -------------------------------------------------------------
 system_prompt = f"""
 You are a world-class aesthetic physician at DERMED CLINIC in Thailand. 
@@ -152,42 +152,61 @@ if st.button("EXECUTE CLINICAL ANALYSIS"):
         st.warning("⚠️ Action Required: Please upload diagnostic images.")
     else:
         with st.spinner('Initiating deep anatomical scan and rendering charts...'):
-            images = [Image.open(f) for f in uploaded_files]
-            request_content = [system_prompt] + images
-            response = model.generate_content(request_content)
-            
-            raw_text = response.text
-            
-            # แยกส่วนกราฟและรายงานออกจากกัน
             try:
-                json_str = re.search(r'===JSON_SCORES===(.*?)===END_JSON===', raw_text, re.DOTALL).group(1)
-                scores_data = json.loads(json_str)
-                report_text = raw_text.split('===REPORT===')[1].strip()
-            except:
-                scores_data = None
-                report_text = raw_text # กรณี AI ตอบผิดฟอร์แมต ให้แสดงข้อความปกติ
-            
-            st.success("✅ Analysis Complete")
-            st.markdown("---")
-            
-            # จัด Layout ซ้ายคือกราฟ ขวาคือข้อความรายงาน
-            if scores_data:
-                col_chart, col_text = st.columns([1, 1.5])
-                with col_chart:
-                    st.markdown("<h4 style='text-align: center; color: #1E1E1E;'>Facial Harmony Radar</h4>", unsafe_allow_html=True)
-                    fig = draw_radar_chart(scores_data)
-                    st.plotly_chart(fig, use_container_width=True)
-                with col_text:
+                # 1. จัดการรูปภาพ: แปลงเป็น RGB และย่อขนาดเพื่อป้องกัน API Error
+                processed_images = []
+                for f in uploaded_files:
+                    img = Image.open(f)
+                    if img.mode != 'RGB':
+                        img = img.convert('RGB')
+                    # ย่อขนาดให้ด้านที่ยาวที่สุดไม่เกิน 1024px (ไฟล์เบาลง แต่ AI ยังวิเคราะห์ได้แม่นยำ)
+                    img.thumbnail((1024, 1024)) 
+                    processed_images.append(img)
+                
+                # 2. ตั้งค่า Model แบบใหม่ (แยก System Instruction ให้ถูกต้อง)
+                diagnostic_model = genai.GenerativeModel(
+                    model_name='gemini-1.5-pro',
+                    system_instruction=system_prompt
+                )
+                
+                # 3. ส่งคำสั่งให้วิเคราะห์รูปภาพ
+                request_content = processed_images + ["Analyze these patient photos according to the system instructions."]
+                response = diagnostic_model.generate_content(request_content)
+                raw_text = response.text
+                
+                # 4. แยกส่วนข้อมูลกราฟและรายงาน
+                try:
+                    json_str = re.search(r'===JSON_SCORES===(.*?)===END_JSON===', raw_text, re.DOTALL).group(1)
+                    scores_data = json.loads(json_str)
+                    report_text = raw_text.split('===REPORT===')[1].strip()
+                except Exception as e:
+                    scores_data = None
+                    report_text = raw_text # กรณี AI ตอบผิดฟอร์แมต
+                
+                st.success("✅ Analysis Complete")
+                st.markdown("---")
+                
+                # 5. แสดงผลลัพธ์
+                if scores_data:
+                    col_chart, col_text = st.columns([1, 1.5])
+                    with col_chart:
+                        st.markdown("<h4 style='text-align: center; color: #1E1E1E;'>Facial Harmony Radar</h4>", unsafe_allow_html=True)
+                        fig = draw_radar_chart(scores_data)
+                        st.plotly_chart(fig, use_container_width=True)
+                    with col_text:
+                        st.markdown(report_text)
+                else:
                     st.markdown(report_text)
-            else:
-                st.markdown(report_text)
-            
-            # ปุ่มโหลด PDF
-            pdf_bytes = create_pdf(report_text, ethnicity, age_group)
-            st.markdown("---")
-            st.download_button(
-                label="📥 EXPORT CLINICAL REPORT (PDF)",
-                data=pdf_bytes,
-                file_name="Dermed_Assessment.pdf",
-                mime="application/pdf",
-            )
+                
+                # 6. ปุ่มโหลด PDF
+                pdf_bytes = create_pdf(report_text, ethnicity, age_group)
+                st.markdown("---")
+                st.download_button(
+                    label="📥 EXPORT CLINICAL REPORT (PDF)",
+                    data=pdf_bytes,
+                    file_name="Dermed_Assessment.pdf",
+                    mime="application/pdf",
+                )
+                
+            except Exception as e:
+                st.error(f"❌ Application Error: โปรดตรวจสอบไฟล์ภาพหรือการเชื่อมต่อ API\n\nรายละเอียด: {str(e)}")
