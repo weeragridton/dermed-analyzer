@@ -2,3 +2,4 @@ streamlit
 google-generativeai
 Pillow
 fpdf2
+plotly
