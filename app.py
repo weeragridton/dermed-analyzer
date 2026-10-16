@@ -5,16 +5,15 @@ from fpdf import FPDF
 import plotly.graph_objects as go
 import json
 import re
-import os
 
 # -------------------------------------------------------------
-# 1. การตั้งค่าหน้าเว็บ & CUSTOM CSS
+# 1. การตั้งค่าหน้าเว็บ & CUSTOM CSS 
 # -------------------------------------------------------------
 st.set_page_config(page_title="DERMED CLINIC | AI Facial Analysis", page_icon="✨", layout="wide")
 
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&display=swap');
     html, body, [class*="css"]  { font-family: 'Montserrat', sans-serif; }
     .stButton>button {
         background-color: #1E1E1E; color: #FFFFFF; border-radius: 4px;
@@ -22,17 +21,14 @@ st.markdown("""
         letter-spacing: 1px; transition: all 0.3s ease 0s; width: 100%;
     }
     .stButton>button:hover { background-color: #C5A880; color: white; border: 1px solid #C5A880; }
-    .score-box {
-        text-align: center; padding: 20px; border-radius: 10px; 
-        background-color: #f8f9fa; border: 1px solid #e9ecef; margin-bottom: 20px;
-    }
-    .score-title { font-size: 14px; color: #666; text-transform: uppercase; letter-spacing: 2px; }
-    .score-value { font-size: 48px; font-weight: 700; color: #1E1E1E; line-height: 1.2; }
-    .score-projected { color: #C5A880; }
+    .st-cx { background-color: #C5A880; }
     hr { margin-top: 1rem; margin-bottom: 2rem; border: 0; border-top: 1px solid rgba(0,0,0,.1); }
     </style>
 """, unsafe_allow_html=True)
 
+# -------------------------------------------------------------
+# 2. ส่วน HEADER (LOGO & TITLE)
+# -------------------------------------------------------------
 col_logo, col_title = st.columns([1, 5])
 with col_logo:
     try:
@@ -42,7 +38,12 @@ with col_logo:
 with col_title:
     st.markdown("<h1 style='color: #1E1E1E; margin-bottom: 0px;'>DERMED CLINIC</h1>", unsafe_allow_html=True)
     st.markdown("<p style='font-size: 18px; color: #666; letter-spacing: 1px;'>ADVANCED FACIAL ARCHITECTURE & AESTHETIC ANALYSIS</p>", unsafe_allow_html=True)
+
 st.markdown("---")
+
+API_KEY = st.secrets["GEMINI_API_KEY"]
+genai.configure(api_key=API_KEY)
+model = genai.GenerativeModel('gemini-1.5-pro')
 
 st.markdown("<h3 style='color: #1E1E1E;'>1. Patient Profile Formulation</h3>", unsafe_allow_html=True)
 col_eth, col_age = st.columns(2)
@@ -60,113 +61,70 @@ st.info("🔒 **Data Privacy (PDPA Compliant):** All images are processed secure
 pdpa_consent = st.checkbox("I verify that explicit patient consent has been obtained for AI-assisted clinical analysis.")
 
 # -------------------------------------------------------------
-# 2. ฟังก์ชันวาดกราฟ
+# 3. ฟังก์ชันสร้าง PDF (แก้ไขปัญหาอักขระพิเศษ)
 # -------------------------------------------------------------
-def draw_radar_chart(scores_dict):
-    categories = ["Midface Volume", "Jawline & Chin", "Eye Area", "Skin Quality", "Overall Symmetry"]
-    values = [scores_dict.get(c, 0) for c in categories]
-    categories.append(categories[0]) 
-    values.append(values[0])
-
-    fig = go.Figure()
-    fig.add_trace(go.Scatterpolar(
-        r=values, theta=categories, fill='toself',
-        fillcolor='rgba(197, 168, 128, 0.4)', line_color='#C5A880', name='Facial Harmony Score'
-    ))
-    fig.update_layout(
-        polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
-        showlegend=False, margin=dict(l=40, r=40, t=30, b=30), height=400
-    )
-    return fig
-
-# -------------------------------------------------------------
-# 3. ฟังก์ชันสร้าง PDF 
-# -------------------------------------------------------------
-def create_pdf(report_text, eth, age, scores_data, radar_fig):
+def create_pdf(report_text, eth, age):
     pdf = FPDF()
     pdf.add_page()
-    
-    try:
-        pdf.image("logo.png", x=85, y=8, w=40)
-        pdf.ln(35)
-    except:
-        pdf.set_font("Helvetica", style="B", size=16)
-        pdf.cell(0, 10, "DERMED CLINIC", ln=True, align="C")
-        pdf.ln(5)
-        
+    pdf.set_font("Helvetica", style="B", size=16)
+    pdf.cell(0, 10, "DERMED CLINIC", ln=True, align="C")
     pdf.set_font("Helvetica", style="B", size=12)
     pdf.cell(0, 10, "Personalized Facial Architecture Report", ln=True, align="C")
-    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-    pdf.ln(5)
-    
+    pdf.line(10, 30, 200, 30)
+    pdf.ln(10)
     pdf.set_font("Helvetica", style="I", size=10)
     pdf.cell(0, 10, f"Patient Profile: {age} years old | {eth} descent", ln=True)
     pdf.ln(5)
     
-    if scores_data:
-        pdf.set_font("Helvetica", style="B", size=16)
-        pdf.cell(95, 15, f"CURRENT SCORE: {scores_data.get('CurrentScore', '')}", border=1, align="C")
-        pdf.set_text_color(197, 168, 128)
-        pdf.cell(95, 15, f"PROJECTED SCORE: {scores_data.get('ProjectedScore', '')}", border=1, align="C", ln=True)
-        pdf.set_text_color(0, 0, 0)
-        pdf.ln(5)
-        
-    if radar_fig:
-        try:
-            radar_fig.write_image("temp_radar.png", width=500, height=350)
-            pdf.image("temp_radar.png", x=50, w=110)
-            os.remove("temp_radar.png")
-        except:
-            pass
-            
-    clean_text = report_text.replace('*', '') 
-    replacements = {'“': '"', '”': '"', "‘": "'", "’": "'", '–': '-', '—': '-', '…': '...'}
+    clean_text = report_text.replace('**', '')
+    replacements = {'“': '"', '”': '"', "‘": "'", "’": "'", '–': '-', '—': '-', '…': '...', '•': '-', '·': '-', '°': ' degrees'}
     for old_char, new_char in replacements.items():
         clean_text = clean_text.replace(old_char, new_char)
     clean_text = clean_text.encode('latin-1', 'ignore').decode('latin-1')
     
-    for line in clean_text.split('\n'):
-        line = line.strip()
-        if not line: continue
-        
-        if re.match(r'^[1-5]\.', line):
-            pdf.ln(3)
-            pdf.set_font("Helvetica", style="B", size=11)
-            pdf.multi_cell(0, 6, line)
-            pdf.set_font("Helvetica", size=10)
-        else:
-            pdf.multi_cell(0, 6, line)
-            
-    pdf.ln(10)
-    
-    current_y = pdf.get_y()
-    try:
-        pdf.image("qr.png", x=15, y=current_y, w=25)
-        pdf.set_xy(45, current_y + 2)
-    except:
-        pdf.set_x(15)
-        
-    pdf.set_font("Helvetica", style="B", size=10)
-    pdf.cell(0, 5, "Location & Contact Details", ln=True)
-    try:
-        pdf.set_x(45)
-    except:
-        pdf.set_x(15)
-    pdf.set_font("Helvetica", size=9)
-    pdf.multi_cell(0, 5, "6th Floor, MBK Center (Room B003005)\n444 Phayathai Road, Wang Mai, Pathum Wan, Bangkok 10330\nOpening Hours: Daily from 11:00 AM - 8:00 PM")
-    
+    pdf.set_font("Helvetica", size=10)
+    pdf.multi_cell(0, 6, clean_text)
+    pdf.ln(15)
+    pdf.set_font("Helvetica", style="I", size=8)
+    pdf.cell(0, 10, "Disclaimer: This analysis is an AI-assisted tool and should be verified by a Dermed Clinic physician.", ln=True)
     return bytes(pdf.output())
 
 # -------------------------------------------------------------
-# 4. PROMPT 
+# 4. ฟังก์ชันวาดกราฟ Radar
+# -------------------------------------------------------------
+def draw_radar_chart(scores_dict):
+    categories = list(scores_dict.keys())
+    values = list(scores_dict.values())
+    categories.append(categories[0]) # ปิดลูปกราฟ
+    values.append(values[0])
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatterpolar(
+        r=values,
+        theta=categories,
+        fill='toself',
+        fillcolor='rgba(197, 168, 128, 0.4)', # สีทองโปร่งแสง
+        line_color='#C5A880',
+        name='Facial Harmony Score'
+    ))
+    fig.update_layout(
+        polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
+        showlegend=False,
+        margin=dict(l=40, r=40, t=30, b=30),
+        height=400
+    )
+    return fig
+
+# -------------------------------------------------------------
+# 5. PROMPT (บังคับโครงสร้างข้อมูลและยาเฉพาะในไทย)
 # -------------------------------------------------------------
 system_prompt = f"""
 You are a world-class aesthetic physician at DERMED CLINIC in Thailand. 
 Analyze the facial images of a {age_group} year old {ethnicity} patient.
 Focus ONLY on non-surgical injectable treatments. 
-CRITICAL RULE: You MUST ONLY recommend products legally approved by the THAI FDA (e.g., Juvéderm, Restylane, Belotero, Teosyal, Sculptra, Radiesse, Gouri, Botox Allergan, Dysport, Xeomin, Nabota, Aestox).
+CRITICAL RULE: You MUST ONLY recommend products, brands, and injectables that are legally available and approved by the THAI FDA (e.g., Juvéderm, Restylane, Belotero, Teosyal, Sculptra, Radiesse, Gouri, Botox Allergan, Dysport, Xeomin, Nabota, Aestox). Do not mention products unavailable in Thailand.
 
-Output EXACTLY in this format:
+Output your response EXACTLY in this format with TWO parts:
 
 ===JSON_SCORES===
 {{
@@ -174,16 +132,16 @@ Output EXACTLY in this format:
     "Jawline & Chin": 75,
     "Eye Area": 70,
     "Skin Quality": 85,
-    "Overall Symmetry": 80,
-    "CurrentScore": "78/100",
-    "ProjectedScore": "88-90/100"
+    "Overall Symmetry": 80
 }}
 ===END_JSON===
 
 ===REPORT===
-1. Core Problem Identification: (Root causes).
-2. Prioritized Action Plan (The DERMED Protocol): Priority 1, 2, 3.
-3. Medical Evidence Note: (Brief rationale).
+1. Current Anatomical Score (0-100).
+2. Core Problem Identification (Root cause like bone/fat pad).
+3. Prioritized Action Plan (The DERMED Protocol): Priority 1, 2, 3 (Mention specific Thai FDA approved brands).
+4. Projected Score.
+5. Medical Evidence Note.
 """
 
 st.write("")
@@ -194,64 +152,42 @@ if st.button("EXECUTE CLINICAL ANALYSIS"):
         st.warning("⚠️ Action Required: Please upload diagnostic images.")
     else:
         with st.spinner('Initiating deep anatomical scan and rendering charts...'):
-            
-            # --- ระบบย่อรูปอัตโนมัติ (ป้องกันไฟล์ใหญ่เกินลิมิต) ---
-            def resize_image(img_file, max_size=1024):
-                img = Image.open(img_file)
-                if img.mode != 'RGB':
-                    img = img.convert('RGB')
-                img.thumbnail((max_size, max_size))
-                return img
-                
-            images = [resize_image(f) for f in uploaded_files]
+            images = [Image.open(f) for f in uploaded_files]
             request_content = [system_prompt] + images
+            response = model.generate_content(request_content)
             
-            # ดึง API Key แบบอันเดียว
+            raw_text = response.text
+            
+            # แยกส่วนกราฟและรายงานออกจากกัน
             try:
-                API_KEY = st.secrets["GEMINI_API_KEY"]
-                genai.configure(api_key=API_KEY)
-                model = genai.GenerativeModel('gemini-3.8-flash')
-                response = model.generate_content(request_content)
-                raw_text = response.text
-                
-                try:
-                    json_str = re.search(r'===JSON_SCORES===(.*?)===END_JSON===', raw_text, re.DOTALL).group(1)
-                    scores_data = json.loads(json_str)
-                    report_text = raw_text.split('===REPORT===')[1].strip()
-                except:
-                    scores_data = None
-                    report_text = raw_text 
-                
-                st.success("✅ Analysis Complete")
-                st.markdown("---")
-                
-                fig = None
-                if scores_data:
-                    col_score1, col_score2 = st.columns(2)
-                    with col_score1:
-                        st.markdown(f"<div class='score-box'><div class='score-title'>Current Anatomical Score</div><div class='score-value'>{scores_data.get('CurrentScore', '')}</div></div>", unsafe_allow_html=True)
-                    with col_score2:
-                        st.markdown(f"<div class='score-box'><div class='score-title'>Projected Post-Treatment Score</div><div class='score-value score-projected'>{scores_data.get('ProjectedScore', '')}</div></div>", unsafe_allow_html=True)
-                    
-                    col_chart, col_text = st.columns([1, 1.5])
-                    with col_chart:
-                        st.markdown("<h4 style='text-align: center; color: #1E1E1E;'>Facial Harmony Radar</h4>", unsafe_allow_html=True)
-                        fig = draw_radar_chart(scores_data)
-                        st.plotly_chart(fig, use_container_width=True)
-                    with col_text:
-                        clean_web_text = report_text.replace('*', '')
-                        st.markdown(clean_web_text)
-                else:
+                json_str = re.search(r'===JSON_SCORES===(.*?)===END_JSON===', raw_text, re.DOTALL).group(1)
+                scores_data = json.loads(json_str)
+                report_text = raw_text.split('===REPORT===')[1].strip()
+            except:
+                scores_data = None
+                report_text = raw_text # กรณี AI ตอบผิดฟอร์แมต ให้แสดงข้อความปกติ
+            
+            st.success("✅ Analysis Complete")
+            st.markdown("---")
+            
+            # จัด Layout ซ้ายคือกราฟ ขวาคือข้อความรายงาน
+            if scores_data:
+                col_chart, col_text = st.columns([1, 1.5])
+                with col_chart:
+                    st.markdown("<h4 style='text-align: center; color: #1E1E1E;'>Facial Harmony Radar</h4>", unsafe_allow_html=True)
+                    fig = draw_radar_chart(scores_data)
+                    st.plotly_chart(fig, use_container_width=True)
+                with col_text:
                     st.markdown(report_text)
-                
-                pdf_bytes = create_pdf(report_text, ethnicity, age_group, scores_data, fig)
-                st.markdown("---")
-                st.download_button(
-                    label="📥 EXPORT CLINICAL REPORT (PDF)",
-                    data=pdf_bytes,
-                    file_name="Dermed_Assessment.pdf",
-                    mime="application/pdf",
-                )
-                
-            except Exception as e:
-                st.error(f"❌ System Error: API connection failed. \n\nDetail: {str(e)}")
+            else:
+                st.markdown(report_text)
+            
+            # ปุ่มโหลด PDF
+            pdf_bytes = create_pdf(report_text, ethnicity, age_group)
+            st.markdown("---")
+            st.download_button(
+                label="📥 EXPORT CLINICAL REPORT (PDF)",
+                data=pdf_bytes,
+                file_name="Dermed_Assessment.pdf",
+                mime="application/pdf",
+            )
