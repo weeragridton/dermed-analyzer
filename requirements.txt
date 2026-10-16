@@ -3,4 +3,4 @@ google-generativeai
 Pillow
 fpdf2
 plotly
-qrcode
+kaleido
