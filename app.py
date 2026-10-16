@@ -165,7 +165,7 @@ if st.button("EXECUTE CLINICAL ANALYSIS"):
                 
                 # 2. ตั้งค่า Model แบบใหม่ (แยก System Instruction ให้ถูกต้อง)
                 diagnostic_model = genai.GenerativeModel(
-                    model_name='gemini-1.5-pro',
+                    model_name='gemini-3.8-flash',
                     system_instruction=system_prompt
                 )
                 
