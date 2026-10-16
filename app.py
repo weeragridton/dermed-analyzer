@@ -15,6 +15,28 @@ st.set_page_config(page_title="DERMED CLINIC | AI Facial Analysis", page_icon="�
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap');
+    html, body, [class*="cssเพื่อให้ง่ายและป้องกันปัญหาการเว้นบรรทัดหรือย่อหน้าผิด (ซึ่งจะทำให้โปรแกรม Error ได้) ให้คุณ **คัดลอกโค้ดด้านล่างนี้ไปวางทับของเดิมทั้งหมดในไฟล์ `app.py` บน GitHub ได้เลยครับ** 
+
+ผมได้ประกอบร่างระบบ "ย่อรูปอัตโนมัติ" และ "แสดงรายละเอียด Error ของ API" เข้าไปในโค้ดชุดนี้ให้เรียบร้อยแล้วครับ:
+
+```python
+import streamlit as st
+import google.generativeai as genai
+from PIL import Image
+from fpdf import FPDF
+import plotly.graph_objects as go
+import json
+import re
+import os
+
+# -------------------------------------------------------------
+# 1. การตั้งค่าหน้าเว็บ & CUSTOM CSS
+# -------------------------------------------------------------
+st.set_page_config(page_title="DERMED CLINIC | AI Facial Analysis", page_icon="✨", layout="wide")
+
+st.markdown("""
+    <style>
+    @import url('[https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap](https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap)');
     html, body, [class*="css"]  { font-family: 'Montserrat', sans-serif; }
     .stButton>button {
         background-color: #1E1E1E; color: #FFFFFF; border-radius: 4px;
@@ -79,16 +101,15 @@ def draw_radar_chart(scores_dict):
     return fig
 
 # -------------------------------------------------------------
-# 3. ฟังก์ชันสร้าง PDF (แก้ไข Logo ทับเส้น, เพิ่มกราฟ, ทำตัวหนาหัวข้อ, QR Code)
+# 3. ฟังก์ชันสร้าง PDF 
 # -------------------------------------------------------------
 def create_pdf(report_text, eth, age, scores_data, radar_fig):
     pdf = FPDF()
     pdf.add_page()
     
-    # Header & Logo
     try:
         pdf.image("logo.png", x=85, y=8, w=40)
-        pdf.ln(35) # เพิ่มระยะห่างให้โลโก้ไม่ทับเส้น
+        pdf.ln(35)
     except:
         pdf.set_font("Helvetica", style="B", size=16)
         pdf.cell(0, 10, "DERMED CLINIC", ln=True, align="C")
@@ -103,7 +124,6 @@ def create_pdf(report_text, eth, age, scores_data, radar_fig):
     pdf.cell(0, 10, f"Patient Profile: {age} years old | {eth} descent", ln=True)
     pdf.ln(5)
     
-    # แสดงคะแนนขนาดใหญ่ใน PDF
     if scores_data:
         pdf.set_font("Helvetica", style="B", size=16)
         pdf.cell(95, 15, f"CURRENT SCORE: {scores_data.get('CurrentScore', '')}", border=1, align="C")
@@ -112,7 +132,6 @@ def create_pdf(report_text, eth, age, scores_data, radar_fig):
         pdf.set_text_color(0, 0, 0)
         pdf.ln(5)
         
-    # บันทึกกราฟลง PDF
     if radar_fig:
         try:
             radar_fig.write_image("temp_radar.png", width=500, height=350)
@@ -121,8 +140,7 @@ def create_pdf(report_text, eth, age, scores_data, radar_fig):
         except:
             pass
             
-    # ทำความสะอาดข้อความ และจัดหัวข้อ 1-5 เป็นตัวหนา
-    clean_text = report_text.replace('*', '') # ลบ * ทั้งหมดออก
+    clean_text = report_text.replace('*', '') 
     replacements = {'“': '"', '”': '"', "‘": "'", "’": "'", '–': '-', '—': '-', '…': '...'}
     for old_char, new_char in replacements.items():
         clean_text = clean_text.replace(old_char, new_char)
@@ -132,7 +150,6 @@ def create_pdf(report_text, eth, age, scores_data, radar_fig):
         line = line.strip()
         if not line: continue
         
-        # ตรวจจับหัวข้อที่ขึ้นต้นด้วย 1. 2. 3. 4. 5.
         if re.match(r'^[1-5]\.', line):
             pdf.ln(3)
             pdf.set_font("Helvetica", style="B", size=11)
@@ -143,7 +160,6 @@ def create_pdf(report_text, eth, age, scores_data, radar_fig):
             
     pdf.ln(10)
     
-    # Footer & QR Code
     current_y = pdf.get_y()
     try:
         pdf.image("qr.png", x=15, y=current_y, w=25)
@@ -163,7 +179,7 @@ def create_pdf(report_text, eth, age, scores_data, radar_fig):
     return bytes(pdf.output())
 
 # -------------------------------------------------------------
-# 4. PROMPT (ปรับโครงสร้าง JSON เพื่อดึงคะแนนรวม)
+# 4. PROMPT 
 # -------------------------------------------------------------
 system_prompt = f"""
 You are a world-class aesthetic physician at DERMED CLINIC in Thailand. 
@@ -199,12 +215,22 @@ if st.button("EXECUTE CLINICAL ANALYSIS"):
         st.warning("⚠️ Action Required: Please upload diagnostic images.")
     else:
         with st.spinner('Initiating deep anatomical scan and rendering charts...'):
-            images = [Image.open(f) for f in uploaded_files]
+            
+            # --- ระบบย่อรูปอัตโนมัติ (ป้องกันไฟล์ใหญ่เกินลิมิต) ---
+            def resize_image(img_file, max_size=1024):
+                img = Image.open(img_file)
+                if img.mode != 'RGB':
+                    img = img.convert('RGB')
+                img.thumbnail((max_size, max_size))
+                return img
+                
+            images = [resize_image(f) for f in uploaded_files]
             request_content = [system_prompt] + images
             
             API_KEYS = st.secrets["GEMINI_API_KEYS"]
             success = False
             raw_text = ""
+            error_message = ""
             
             for key in API_KEYS:
                 try:
@@ -215,10 +241,11 @@ if st.button("EXECUTE CLINICAL ANALYSIS"):
                     success = True
                     break 
                 except Exception as e:
+                    error_message = str(e)
                     continue
             
             if not success:
-                st.error("❌ System Error: API limits exceeded.")
+                st.error(f"❌ System Error: API connection failed. \n\nDetail: {error_message}")
             else:
                 try:
                     json_str = re.search(r'===JSON_SCORES===(.*?)===END_JSON===', raw_text, re.DOTALL).group(1)
@@ -233,7 +260,6 @@ if st.button("EXECUTE CLINICAL ANALYSIS"):
                 
                 fig = None
                 if scores_data:
-                    # โชว์คะแนนแบบใหญ่เน้นๆ บนหน้าเว็บ
                     col_score1, col_score2 = st.columns(2)
                     with col_score1:
                         st.markdown(f"<div class='score-box'><div class='score-title'>Current Anatomical Score</div><div class='score-value'>{scores_data.get('CurrentScore', '')}</div></div>", unsafe_allow_html=True)
@@ -246,7 +272,6 @@ if st.button("EXECUTE CLINICAL ANALYSIS"):
                         fig = draw_radar_chart(scores_data)
                         st.plotly_chart(fig, use_container_width=True)
                     with col_text:
-                        # ลบดอกจันออกก่อนแสดงผลบนเว็บ
                         clean_web_text = report_text.replace('*', '')
                         st.markdown(clean_web_text)
                 else:
