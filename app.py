@@ -56,6 +56,7 @@ st.markdown("<h3 style='color: #1E1E1E;'>2. Image Acquisition</h3>", unsafe_allo
 uploaded_files = st.file_uploader("Upload Medical Photos (Frontal, 45° Oblique, 90° Profile)", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
 
 st.write("")
+st.info("🔒 **Data Privacy (PDPA Compliant):** All images are processed securely in-memory and are never stored on our servers.")
 pdpa_consent = st.checkbox("I verify that explicit patient consent has been obtained for AI-assisted clinical analysis.")
 
 # -------------------------------------------------------------
@@ -205,26 +206,14 @@ if st.button("EXECUTE CLINICAL ANALYSIS"):
             images = [resize_image(f) for f in uploaded_files]
             request_content = [system_prompt] + images
             
-            API_KEYS = st.secrets["GEMINI_API_KEYS"]
-            success = False
-            raw_text = ""
-            error_message = ""
-            
-            for key in API_KEYS:
-                try:
-                    genai.configure(api_key=key)
-                    model = genai.GenerativeModel('gemini-3.8-flash')
-                    response = model.generate_content(request_content)
-                    raw_text = response.text
-                    success = True
-                    break 
-                except Exception as e:
-                    error_message = str(e)
-                    continue
-            
-            if not success:
-                st.error(f"❌ System Error: API connection failed. \n\nDetail: {error_message}")
-            else:
+            # ดึง API Key แบบอันเดียว
+            try:
+                API_KEY = st.secrets["GEMINI_API_KEY"]
+                genai.configure(api_key=API_KEY)
+                model = genai.GenerativeModel('gemini-3.8-flash')
+                response = model.generate_content(request_content)
+                raw_text = response.text
+                
                 try:
                     json_str = re.search(r'===JSON_SCORES===(.*?)===END_JSON===', raw_text, re.DOTALL).group(1)
                     scores_data = json.loads(json_str)
@@ -263,3 +252,6 @@ if st.button("EXECUTE CLINICAL ANALYSIS"):
                     file_name="Dermed_Assessment.pdf",
                     mime="application/pdf",
                 )
+                
+            except Exception as e:
+                st.error(f"❌ System Error: API connection failed. \n\nDetail: {str(e)}")
